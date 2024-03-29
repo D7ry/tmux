@@ -338,7 +338,12 @@ main(int argc, char **argv)
 	uint64_t				 flags = 0;
 	const struct options_table_entry	*oe;
 	u_int					 i;
+    
+    printf("Hello tmux!\n");
 
+    log_add_level();
+    // log_open("logs.txt");
+    log_debug("tmux started");
 	if (setlocale(LC_CTYPE, "en_US.UTF-8") == NULL &&
 	    setlocale(LC_CTYPE, "C.UTF-8") == NULL) {
 		if (setlocale(LC_CTYPE, "") == NULL)

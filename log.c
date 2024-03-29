@@ -60,7 +60,7 @@ log_open(const char *name)
 		return;
 	log_close();
 
-	xasprintf(&path, "tmux-%s-%ld.log", name, (long)getpid());
+	xasprintf(&path, "tmux-%s.log", name);
 	log_file = fopen(path, "a");
 	free(path);
 	if (log_file == NULL)
@@ -121,10 +121,24 @@ log_vwrite(const char *msg, va_list ap, const char *prefix)
 	free(out);
 }
 
+void
+log1(const char *msg, ...)
+{
+	va_list	ap;
+
+	if (log_file == NULL)
+		return;
+
+	va_start(ap, msg);
+	log_vwrite(msg, ap, "");
+	va_end(ap);
+}
+
 /* Log a debug message. */
 void
 log_debug(const char *msg, ...)
 {
+    return;
 	va_list	ap;
 
 	if (log_file == NULL)
