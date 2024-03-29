@@ -49,10 +49,14 @@ static int	tty_keys_next1(struct tty *, const char *, size_t, key_code *,
 static void	tty_keys_callback(int, short, void *);
 static int	tty_keys_extended_key(struct tty *, const char *, size_t,
 		    size_t *, key_code *);
+static int	tty_keys_kitty_key(struct tty *, const char *, size_t,
+		    size_t *, key_code *);
 static int	tty_keys_mouse(struct tty *, const char *, size_t, size_t *,
 		    struct mouse_event *);
 static int	tty_keys_clipboard(struct tty *, const char *, size_t,
 		    size_t *);
+static int  tty_keys_device_or_keyboard_protocol_attributes(struct tty *, const char *, size_t,
+            size_t *);
 static int	tty_keys_device_attributes(struct tty *, const char *, size_t,
 		    size_t *);
 static int	tty_keys_device_attributes2(struct tty *, const char *, size_t,
@@ -674,7 +678,12 @@ tty_keys_next(struct tty *tty)
 	len = EVBUFFER_LENGTH(tty->in);
 	if (len == 0)
 		return (0);
-	log_debug("%s: keys are %zu (%.*s)", c->name, len, (int)len, buf);
+    log_open("here");
+	log1("%s: keys are %zu (%.*s)", c->name, len, (int)len, buf);
+    // exit(2);
+
+    /* Is this from the kitty protocol? */
+	tty_keys_kitty_key(tty, buf, len, &size, &key);
 
 	/* Is this a clipboard response? */
 	switch (tty_keys_clipboard(tty, buf, len, &size)) {
@@ -688,7 +697,7 @@ tty_keys_next(struct tty *tty)
 	}
 
 	/* Is this a primary device attributes response? */
-	switch (tty_keys_device_attributes(tty, buf, len, &size)) {
+	switch (tty_keys_device_or_keyboard_protocol_attributes(tty, buf, len, &size)) {
 	case 0:		/* yes */
 		key = KEYC_UNKNOWN;
 		goto complete_key;
@@ -894,6 +903,17 @@ tty_keys_callback(__unused int fd, __unused short events, void *data)
 		while (tty_keys_next(tty))
 			;
 	}
+}
+
+static int 
+tty_keys_kitty_key(struct tty *tty, const char *buf, size_t len,
+    size_t *size, key_code *key)
+{
+    printf("tty_keys_kitty_key\n");
+    for (int i =0 ; i < len; i++) {
+        printf("%c", buf[i]);
+    }
+    return 0;
 }
 
 /*
@@ -1340,6 +1360,114 @@ tty_keys_device_attributes(struct tty *tty, const char *buf, size_t len,
 	return (0);
 }
 
+/*
+ * Handle primary device/keyboard protocol attributes input. Returns 0 for success, -1 for
+ * failure, 1 for partial.
+ */
+int  tty_keys_device_or_keyboard_protocol_attributes(struct tty *tty, const char *buf, size_t len,
+    size_t *size)
+{
+	struct client	*c = tty->client;
+	int		*features = &c->term_features;
+	u_int		 i, n = 0;
+	char		 tmp[128], *endptr, p[32] = { 0 }, *cp, *next;
+    u_int   is_keyboard_protocol_attributes = 0; // 0 for device attributes, 1 for keyboard protocol attributes
+ 
+	*size = 0;
+
+	/* First three bytes are always \033[?. */
+	if (buf[0] != '\033')
+		return (-1);
+	if (len == 1)
+		return (1);
+	if (buf[1] != '[')
+		return (-1);
+	if (len == 2)
+		return (1);
+	if (buf[2] != '?')
+		return (-1);
+	if (len == 3)
+		return (1);
+
+    
+    /* Copy the rest up to a u or c */
+    for (i = 0; i < (sizeof tmp); i++) {
+        if (3 + i == len)
+            return (1);
+        if (buf[3 + i] == 'u') {
+            is_keyboard_protocol_attributes = 1;
+            break;
+        } else if (buf[3 + i] == 'c') {
+            is_keyboard_protocol_attributes = 0;
+            break;
+        }
+        tmp[i] = buf[3 + i];
+    }
+	if (i == (sizeof tmp))
+		return (-1);
+	tmp[i] = '\0';
+
+	*size = 4 + i;
+
+    log1("is_keyboard_protocol_attributes: %d\n", is_keyboard_protocol_attributes);
+
+    if (is_keyboard_protocol_attributes) {
+        log1("Keyboard protocol attributes: %.*s\n", (int)*size, buf);
+        int keyboard_protocol_attr = strtoul(tmp, &endptr, 10);
+
+        if (keyboard_protocol_attr != 0) {
+            log1("Non-zero keyboard protocol attribute: %d\n", keyboard_protocol_attr);
+        }
+
+        // TODO: actually add features
+        int DISAMBIGUATE_ESCAPE_CODES = 0b1;
+        int REPORT_EVENT_TYPES = 0b10;
+        int REPORT_ALTERNATE_KEYS = 0b100;
+        int REPORT_ALL_KEYS_AS_ESCAPE_CODES = 0b1000;
+        int REPORT_ASSOCIATED_TEXT = 0b10000;
+        log1("keyboard_protocol_attr: %d\n", keyboard_protocol_attr);
+    } else {
+        
+        if (tty->flags & TTY_HAVEDA)
+            return (-1);
+
+        log1("Device attributes: %.*s\n", (int)*size, buf);
+        /* Convert all arguments to numbers. */
+        cp = tmp;
+        while ((next = strsep(&cp, ";")) != NULL) {
+            p[n] = strtoul(next, &endptr, 10);
+            if (*endptr != '\0')
+                p[n] = 0;
+            if (++n == nitems(p))
+                break;
+        }
+
+        /* Add terminal features. */
+        switch (p[0]) {
+        case 61: /* level 1 */
+        case 62: /* level 2 */
+        case 63: /* level 3 */
+        case 64: /* level 4 */
+        case 65: /* level 5 */
+            for (i = 1; i < n; i++) {
+                log_debug("%s: DA feature: %d", c->name, p[i]);
+                if (p[i] == 4)
+                    tty_add_features(features, "sixel", ",");
+                if (p[i] == 21)
+                    tty_add_features(features, "margins", ",");
+                if (p[i] == 28)
+                    tty_add_features(features, "rectfill", ",");
+            }
+            break;
+        }
+        log_debug("%s: received primary DA %.*s", c->name, (int)*size, buf);
+
+        tty_update_features(tty);
+        tty->flags |= TTY_HAVEDA;
+    }
+
+    return (0);
+}
 /*
  * Handle secondary device attributes input. Returns 0 for success, -1 for
  * failure, 1 for partial.
