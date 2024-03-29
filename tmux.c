@@ -339,7 +339,7 @@ main(int argc, char **argv)
 	const struct options_table_entry	*oe;
 	u_int					 i;
     
-    printf("Hello tmux!\n");
+    // printf("Hello tmux!\n");
 
     log_add_level();
     // log_open("logs.txt");
