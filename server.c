@@ -201,7 +201,7 @@ server_start(struct tmuxproc *client, int flags, struct event_base *base,
 	sigprocmask(SIG_SETMASK, &oldset, NULL);
 
 	if (log_get_level() > 1)
-		tty_create_log();
+		//tty_create_log();
 	if (pledge("stdio rpath wpath cpath fattr unix getpw recvfd proc exec "
 	    "tty ps", NULL) != 0)
 		fatal("pledge failed");
