@@ -360,6 +360,9 @@ tty_start_tty(struct tty *tty)
 	tty->mouse_drag_flag = 0;
 	tty->mouse_drag_update = NULL;
 	tty->mouse_drag_release = NULL;
+    
+    const char enable_kitty_keyboard_protocol[] = "\033[>1u";
+    tty_puts(tty, enable_kitty_keyboard_protocol);
 }
 
 void
@@ -377,6 +380,8 @@ tty_send_requests(struct tty *tty)
 			tty_puts(tty, "\033[>q");
 		tty_puts(tty, "\033]10;?\033\\");
 		tty_puts(tty, "\033]11;?\033\\");
+        const char query_kitty_protocol_support[] = "\033[?u";
+        tty_puts(tty, query_kitty_protocol_support); 
 	} else
 		tty->flags |= TTY_ALL_REQUEST_FLAGS;
 	tty->last_requests = time (NULL);
@@ -409,7 +414,10 @@ tty_stop_tty(struct tty *tty)
 	if (!(tty->flags & TTY_STARTED))
 		return;
 	tty->flags &= ~TTY_STARTED;
-
+    
+    const char disable_kitty_keyboard_protocol[] =  "\033[<u";
+    tty_puts(tty, disable_kitty_keyboard_protocol);
+    
 	evtimer_del(&tty->start_timer);
 
 	event_del(&tty->timer);
