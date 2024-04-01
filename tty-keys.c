@@ -685,11 +685,9 @@ tty_kitty_keys_next(struct tty *tty)
 	if (len == 0)
 		return (0);
 
-	evbuffer_drain(tty->in, len);
-    return 1;
-
 
 	/* Is this a clipboard response? */
+    //TODO: not sure if we need this
 	switch (tty_keys_clipboard(tty, buf, len, &size)) {
 	case 0:		/* yes */
 		key = KEYC_UNKNOWN;
@@ -746,6 +744,8 @@ tty_kitty_keys_next(struct tty *tty)
 
 
 first_key:
+    log1("[tty_kitty_keys_next] keys are (%.*s)", (int)len, buf);
+    size = len; // read the whole thing lmao
     goto complete_key;
 
 partial_key:
@@ -757,7 +757,7 @@ partial_key:
 		if (evtimer_initialized(&tty->key_timer) &&
 		    !evtimer_pending(&tty->key_timer, NULL)) {
 			expired = 1;
-			goto first_key;
+			goto first_key; // deal with the key as it is complete
 		}
 		return (0);
 	}
