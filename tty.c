@@ -362,7 +362,9 @@ tty_start_tty(struct tty *tty)
 	tty->mouse_drag_release = NULL;
     
     // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
-    const char enable_kitty_keyboard_protocol[] = "\033[>31u"; // enable everything
+    // const char enable_kitty_keyboard_protocol[] = "\033[>31u"; // enable everything
+    
+    const char enable_kitty_keyboard_protocol[] = "\033[>1u"; // "disambiguate esc"
     tty_puts(tty, enable_kitty_keyboard_protocol);
 }
 

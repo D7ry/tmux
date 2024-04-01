@@ -187,6 +187,7 @@ dist_tmux_SOURCES = \
 	tty-acs.c \
 	tty-features.c \
 	tty-keys.c \
+	tty-kitty.c \
 	tty-term.c \
 	tty.c \
 	utf8-combined.c \
