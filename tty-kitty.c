@@ -14,17 +14,69 @@
 
 #include "tmux.h"
 
-/* Translate kitty keycode back to legacy keycode.*/
-key_code
-tty_keys_kitty_to_legacy(key_code kitty_code)
+#define REVERT_DIAMBIGUATE_ESCAPE_CODES 1
+
+/*
+ *
+ * modifiers
+shift     0b1         (1)
+alt       0b10        (2)
+ctrl      0b100       (4)
+super     0b1000      (8)
+hyper     0b10000     (16)
+meta      0b100000    (32)
+caps_lock 0b1000000   (64)
+num_lock  0b10000000  (128) 
+
+*/
+
+int
+kitty_disambiguate_escape_codes(struct tty *tty, const char *buf, size_t len, size_t *size, key_code *key)
 {
-    
+    // buf starts with \033[ and ends with a character u
+
+    // look for u
+    int u_index = -1;
+    int semilcolon_index = -1;
+    // start from 2 because we know the first two characters are \033[
+    for (int i = 2; i < len; i++) {
+        if (buf[i] == ';') {
+            semilcolon_index = i;
+        }
+        if (buf[i] == 'u') {
+            u_index = i;
+            break;
+        }
+    }
+    if (u_index == -1 || semilcolon_index == -1) {
+        return 1;
+    }
+
+    if (u_index == semilcolon_index) {
+        return 1;
+    }
+
+    *size = u_index + 1;
+
+    if (REVERT_DIAMBIGUATE_ESCAPE_CODES) {
+        // only get the part before the semicolon
+        char keycode_str[16];
+        int key_size = semilcolon_index - 2;
+        memcpy(keycode_str, buf + 2, key_size);
+        keycode_str[key_size] = '\0';
+        int keycode = atoi(keycode_str);
+        *key = keycode;
+    } else {
+    }
+
+    return 0;
 }
 
 int
 tty_keys_kitty(struct tty *tty, const char *buf, size_t len, size_t *size, key_code *key)
 {
-    log1("[tty_keys_kitty] keys are (%.*s)", (int)len, buf);
+    log1("[tty_keys_kitty] keys are (%.*s) (%llu)", (int)len, buf, *key);
+    
     // Check kitty features TODO: actually check for kitty
 
 	/* First two bytes are always \033[. */
@@ -36,6 +88,15 @@ tty_keys_kitty(struct tty *tty, const char *buf, size_t len, size_t *size, key_c
 		return (-1);
 	if (len == 2)
 		return (1);
+
+    switch (kitty_disambiguate_escape_codes(tty, buf, len, size, key)) {
+        case 0: // valid
+            return 0;
+        case -1: // not valid
+            break;
+        case 1: // partial, return partial
+            return 1;
+    }
 
     return -1;
 }

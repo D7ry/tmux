@@ -16,6 +16,8 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#define ENABLE_TTY_KEYBOARD_PROTOCOL 1
+
 #include <sys/types.h>
 #include <sys/ioctl.h>
 
@@ -365,7 +367,9 @@ tty_start_tty(struct tty *tty)
     // const char enable_kitty_keyboard_protocol[] = "\033[>31u"; // enable everything
     
     const char enable_kitty_keyboard_protocol[] = "\033[>1u"; // "disambiguate esc"
-    tty_puts(tty, enable_kitty_keyboard_protocol);
+    if (ENABLE_TTY_KEYBOARD_PROTOCOL == 1) {
+        tty_puts(tty, enable_kitty_keyboard_protocol);
+    }
 }
 
 void
@@ -418,9 +422,11 @@ tty_stop_tty(struct tty *tty)
 		return;
 	tty->flags &= ~TTY_STARTED;
     
-    const char disable_kitty_keyboard_protocol[] =  "\033[<u";
-    tty_puts(tty, disable_kitty_keyboard_protocol);
-    
+    if (ENABLE_TTY_KEYBOARD_PROTOCOL == 1) {
+        const char disable_kitty_keyboard_protocol[] =  "\033[<u";
+        tty_puts(tty, disable_kitty_keyboard_protocol);
+    }
+
 	evtimer_del(&tty->start_timer);
 
 	event_del(&tty->timer);

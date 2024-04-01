@@ -55,8 +55,6 @@ static int	tty_keys_next1(struct tty *, const char *, size_t, key_code *,
 static void	tty_keys_callback(int, short, void *);
 static int	tty_keys_extended_key(struct tty *, const char *, size_t,
 		    size_t *, key_code *);
-static int	tty_keys_kitty_key(struct tty *, const char *, size_t,
-		    size_t *, key_code *);
 static int	tty_keys_mouse(struct tty *, const char *, size_t, size_t *,
 		    struct mouse_event *);
 static int	tty_keys_clipboard(struct tty *, const char *, size_t,
@@ -688,8 +686,7 @@ tty_keys_next(struct tty *tty)
 	len = EVBUFFER_LENGTH(tty->in);
 	if (len == 0)
 		return (0);
- //    log_open("here");
-	log1("[tty_keys_next]: keys are %zu (%.*s)", len, (int)len, buf);
+    log_open("here");
     // exit(2);
 	/* Is this a clipboard response? */
 	switch (tty_keys_clipboard(tty, buf, len, &size)) {
@@ -747,7 +744,7 @@ tty_keys_next(struct tty *tty)
 	}
 
     /* Is this a kitty protocol key? (only enabled when kitty is enabled) */
-    switch (tty_keys_kitty(tty, buf, len, &size)) {
+    switch (tty_keys_kitty(tty, buf, len, &size, &key)) {
         case 0:		/* yes */
             goto complete_key;
         case -1:	/* no, or not valid */
@@ -919,17 +916,6 @@ tty_keys_callback(__unused int fd, __unused short events, void *data)
 		while (tty_keys_next(tty))
 			;
 	}
-}
-
-static int 
-tty_keys_kitty_key(struct tty *tty, const char *buf, size_t len,
-    size_t *size, key_code *key)
-{
-    printf("tty_keys_kitty_key\n");
-    for (int i =0 ; i < len; i++) {
-        printf("%c", buf[i]);
-    }
-    return 0;
 }
 
 /*
