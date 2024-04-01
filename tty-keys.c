@@ -667,6 +667,8 @@ tty_keys_next1(struct tty *tty, const char *buf, size_t len, key_code *key,
 int 
 tty_kitty_keys_next(struct tty *tty)
 {
+    
+    log_open("here");
 	struct client		*c = tty->client;
 	struct timeval		 tv;
 	const char		*buf;
@@ -683,9 +685,100 @@ tty_kitty_keys_next(struct tty *tty)
 	if (len == 0)
 		return (0);
 
+	evbuffer_drain(tty->in, len);
+    return 1;
 
 
-done:
+	/* Is this a clipboard response? */
+	switch (tty_keys_clipboard(tty, buf, len, &size)) {
+	case 0:		/* yes */
+		key = KEYC_UNKNOWN;
+		goto complete_key;
+	case -1:	/* no, or not valid */
+		break;
+	case 1:		/* partial */
+		goto partial_key;
+	}
+
+	/* Is this a primary device attributes response? */
+	switch (tty_keys_device_or_keyboard_protocol_attributes(tty, buf, len, &size)) {
+	case 0:		/* yes */
+		key = KEYC_UNKNOWN;
+		goto complete_key;
+	case -1:	/* no, or not valid */
+		break;
+	case 1:		/* partial */
+		goto partial_key;
+	}
+
+	/* Is this a secondary device attributes response? */
+	switch (tty_keys_device_attributes2(tty, buf, len, &size)) {
+	case 0:		/* yes */
+		key = KEYC_UNKNOWN;
+		goto complete_key;
+	case -1:	/* no, or not valid */
+		break;
+	case 1:		/* partial */
+		goto partial_key;
+	}
+
+	/* Is this an extended device attributes response? */
+	switch (tty_keys_extended_device_attributes(tty, buf, len, &size)) {
+	case 0:		/* yes */
+		key = KEYC_UNKNOWN;
+		goto complete_key;
+	case -1:	/* no, or not valid */
+		break;
+	case 1:		/* partial */
+		goto partial_key;
+	}
+
+	/* Is this a colours response? */
+	switch (tty_keys_colours(tty, buf, len, &size)) {
+	case 0:		/* yes */
+		key = KEYC_UNKNOWN;
+		goto complete_key;
+	case -1:	/* no, or not valid */
+		break;
+	case 1:		/* partial */
+		goto partial_key;
+	}
+
+
+first_key:
+    goto complete_key;
+
+partial_key:
+	log_debug("%s: partial key %.*s", c->name, (int)len, buf);
+
+	log1("%s: partial key %.*s", c->name, (int)len, buf);
+	/* If timer is going, check for expiration. */
+	if (tty->flags & TTY_TIMER) {
+		if (evtimer_initialized(&tty->key_timer) &&
+		    !evtimer_pending(&tty->key_timer, NULL)) {
+			expired = 1;
+			goto first_key;
+		}
+		return (0);
+	}
+
+	/* Get the time period. */
+	delay = options_get_number(global_options, "escape-time");
+	if (delay == 0)
+		delay = 1;
+	tv.tv_sec = delay / 1000;
+	tv.tv_usec = (delay % 1000) * 1000L;
+
+	/* Start the timer. */
+	if (event_initialized(&tty->key_timer))
+		evtimer_del(&tty->key_timer);
+	evtimer_set(&tty->key_timer, tty_keys_callback, tty);
+	evtimer_add(&tty->key_timer, &tv);
+
+	tty->flags |= TTY_TIMER;
+	return (0);
+
+complete_key:
 	/* Remove data from buffer. */
 	evbuffer_drain(tty->in, size);
 
@@ -739,7 +832,7 @@ tty_keys_next(struct tty *tty)
 	len = EVBUFFER_LENGTH(tty->in);
 	if (len == 0)
 		return (0);
-    log_open("here");
+ //    log_open("here");
 	log1("%s: keys are %zu (%.*s)", c->name, len, (int)len, buf);
     // exit(2);
     
