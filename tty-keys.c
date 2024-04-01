@@ -16,6 +16,14 @@
  * OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#define KITTY_PROTOCOL 1
+
+#if KITTY_PROTOCOL ==1
+
+
+#endif
+
+
 #include <sys/types.h>
 #include <sys/time.h>
 
@@ -745,7 +753,47 @@ tty_kitty_keys_next(struct tty *tty)
 
 first_key:
     log1("[tty_kitty_keys_next] keys are (%.*s)", (int)len, buf);
-    size = len; // read the whole thing lmao
+    
+	/* First two bytes are always \033[. */
+	if (buf[0] != '\033')
+        goto first_key_temp_done;
+	if (len == 1)
+        goto first_key_temp_done;
+	if (buf[1] != '[')
+        goto first_key_temp_done;
+	if (len == 2)
+        goto first_key_temp_done;
+
+    /* Look for ; character */
+    int keycode_begin = 2;
+    int keycode_end = keycode_begin;
+    while (keycode_end < len && buf[keycode_end] != ';') {
+        keycode_end++;
+    }
+    if (keycode_end == len) {
+        goto first_key_temp_done;
+    }
+
+    /* Get the key code */
+    char keycode_str[16];
+    memcpy(keycode_str, buf + keycode_begin, keycode_end - keycode_begin);
+    keycode_str[keycode_end - keycode_begin] = '\0';
+    int keycode = atoi(keycode_str);
+    log1("[tty_kitty_keys_next] keycode: %d", keycode);
+    if (keycode >= 0 && keycode < 256) {
+        log1("[tty_kitty_keys_next] key: %c", (char)keycode);
+    }
+    
+
+    
+
+
+    if (keycode_end == len) {
+        goto first_key_temp_done;
+    }
+
+first_key_temp_done:
+    size = len; // read the whole thing lmao TODO: not read the whole thing
     goto complete_key;
 
 partial_key:
