@@ -29,6 +29,7 @@ caps_lock 0b1000000   (64)
 num_lock  0b10000000  (128) 
 
 */
+#define MOD_CTRL 5
 
 int
 kitty_disambiguate_escape_codes(struct tty *tty, const char *buf, size_t len, size_t *size, key_code *key)
@@ -58,6 +59,13 @@ kitty_disambiguate_escape_codes(struct tty *tty, const char *buf, size_t len, si
 
     *size = u_index + 1;
 
+    int modifier = 0;
+    int modifier_size = u_index - semilcolon_index - 1;
+    char modifier_str [4];
+    memcpy(modifier_str , buf + semilcolon_index + 1,modifier_size);
+    modifier_str[modifier_size] = '\0';
+    modifier = atoi(modifier_str);
+
     if (REVERT_DIAMBIGUATE_ESCAPE_CODES) {
         // only get the part before the semicolon
         char keycode_str[16];
@@ -65,6 +73,17 @@ kitty_disambiguate_escape_codes(struct tty *tty, const char *buf, size_t len, si
         memcpy(keycode_str, buf + 2, key_size);
         keycode_str[key_size] = '\0';
         int keycode = atoi(keycode_str);
+        //
+        switch (modifier) {
+            case MOD_CTRL:
+                // regular terminal ctrl keycodes
+                if ((keycode >= 'a' && keycode <= 'z') || (keycode >= 'A' && keycode <= 'Z')) {
+                    keycode = keycode - 'a' + 1;
+                }
+                break;
+        }
+
+        
         *key = keycode;
     } else {
     }
