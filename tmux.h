@@ -2452,6 +2452,8 @@ void		tty_keys_build(struct tty *);
 void		tty_keys_free(struct tty *);
 int		tty_keys_next(struct tty *);
 
+int tty_kitty_keys_next(struct tty *);
+
 /* arguments.c */
 void		 args_set(struct args *, u_char, struct args_value *, int);
 struct args 	*args_create(void);

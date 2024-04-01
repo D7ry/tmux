@@ -31,6 +31,11 @@
 
 #include "tmux.h"
 
+int DISAMBIGUATE_ESCAPE_CODES = 0b1;
+int REPORT_EVENT_TYPES = 0b10;
+int REPORT_ALTERNATE_KEYS = 0b100;
+int REPORT_ALL_KEYS_AS_ESCAPE_CODES = 0b1000;
+int REPORT_ASSOCIATED_TEXT = 0b10000;
 /*
  * Handle keys input from the outside terminal. tty_default_*_keys[] are a base
  * table of supported keys which are looked up in terminfo(5) and translated
@@ -659,10 +664,66 @@ tty_keys_next1(struct tty *tty, const char *buf, size_t len, key_code *key,
 	return (-1);
 }
 
+int 
+tty_kitty_keys_next(struct tty *tty)
+{
+	struct client		*c = tty->client;
+	struct timeval		 tv;
+	const char		*buf;
+	size_t			 len, size;
+	cc_t			 bspace;
+	int			 delay, expired = 0, n;
+	key_code		 key;
+	struct mouse_event	 m = { 0 };
+	struct key_event	*event;
+
+	/* Get key buffer. */
+	buf = EVBUFFER_DATA(tty->in);
+	len = EVBUFFER_LENGTH(tty->in);
+	if (len == 0)
+		return (0);
+
+
+
+done:
+	/* Remove data from buffer. */
+	evbuffer_drain(tty->in, size);
+
+	/* Remove key timer. */
+	if (event_initialized(&tty->key_timer))
+		evtimer_del(&tty->key_timer);
+	tty->flags &= ~TTY_TIMER;
+
+	/* Check for focus events. */
+	if (key == KEYC_FOCUS_OUT) {
+		c->flags &= ~CLIENT_FOCUSED;
+		window_update_focus(c->session->curw->window);
+		notify_client("client-focus-out", c);
+	} else if (key == KEYC_FOCUS_IN) {
+		c->flags |= CLIENT_FOCUSED;
+		notify_client("client-focus-in", c);
+		window_update_focus(c->session->curw->window);
+	}
+
+	/* Fire the key. */
+	if (key != KEYC_UNKNOWN) {
+		event = xmalloc(sizeof *event);
+		event->key = key;
+		memcpy(&event->m, &m, sizeof event->m);
+		if (!server_client_handle_key(c, event))
+			free(event);
+	}
+
+	return (1);
+}
+
 /* Process at least one key in the buffer. Return 0 if no keys present. */
 int
 tty_keys_next(struct tty *tty)
 {
+    // use kitty keys for testing
+    return tty_kitty_keys_next(tty);
+
 	struct client		*c = tty->client;
 	struct timeval		 tv;
 	const char		*buf;
@@ -681,9 +742,8 @@ tty_keys_next(struct tty *tty)
     log_open("here");
 	log1("%s: keys are %zu (%.*s)", c->name, len, (int)len, buf);
     // exit(2);
+    
 
-    /* Is this from the kitty protocol? */
-	tty_keys_kitty_key(tty, buf, len, &size, &key);
 
 	/* Is this a clipboard response? */
 	switch (tty_keys_clipboard(tty, buf, len, &size)) {
@@ -753,6 +813,10 @@ tty_keys_next(struct tty *tty)
 	case 1:		/* partial */
 		goto partial_key;
 	}
+
+
+    /* Is this from the kitty protocol? */
+	tty_keys_kitty_key(tty, buf, len, &size, &key);
 
 	/* Is this an extended key press? */
 	switch (tty_keys_extended_key(tty, buf, len, &size, &key)) {
@@ -1409,23 +1473,17 @@ int  tty_keys_device_or_keyboard_protocol_attributes(struct tty *tty, const char
 
 	*size = 4 + i;
 
-    log1("is_keyboard_protocol_attributes: %d\n", is_keyboard_protocol_attributes);
 
     if (is_keyboard_protocol_attributes) {
-        log1("Keyboard protocol attributes: %.*s\n", (int)*size, buf);
+        log1("Keyboard protocol attributes: %.*s", (int)*size, buf);
         int keyboard_protocol_attr = strtoul(tmp, &endptr, 10);
 
         if (keyboard_protocol_attr != 0) {
-            log1("Non-zero keyboard protocol attribute: %d\n", keyboard_protocol_attr);
+            log1("Non-zero keyboard protocol attribute: %d", keyboard_protocol_attr);
         }
 
         // TODO: actually add features
-        int DISAMBIGUATE_ESCAPE_CODES = 0b1;
-        int REPORT_EVENT_TYPES = 0b10;
-        int REPORT_ALTERNATE_KEYS = 0b100;
-        int REPORT_ALL_KEYS_AS_ESCAPE_CODES = 0b1000;
-        int REPORT_ASSOCIATED_TEXT = 0b10000;
-        log1("keyboard_protocol_attr: %d\n", keyboard_protocol_attr);
+        log1("keyboard_protocol_attr: %d", keyboard_protocol_attr);
     } else {
         
         if (tty->flags & TTY_HAVEDA)

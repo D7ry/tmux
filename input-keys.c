@@ -435,6 +435,8 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 	struct utf8_data	 ud;
 	char			 tmp[64], modifier;
 
+    log1("=======input_key: keycode=0x%llx=======", key);
+
 	/* Mouse keys need a pane. */
 	if (KEYC_IS_MOUSE(key))
 		return (0);
@@ -442,9 +444,11 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 	/* Literal keys go as themselves (can't be more than eight bits). */
 	if (key & KEYC_LITERAL) {
 		ud.data[0] = (u_char)key;
+        log1("return literal key");
 		input_key_write(__func__, bev, &ud.data[0], 1);
 		return (0);
 	}
+
 
 	/* Is this backspace? */
 	if ((key & KEYC_MASK_KEY) == KEYC_BSPACE) {
@@ -452,6 +456,7 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 		if (newkey >= 0x7f)
 			newkey = '\177';
 		key = newkey|(key & (KEYC_MASK_MODIFIERS|KEYC_MASK_FLAGS));
+        log1("key is backspace key");
 	}
 
 	/*
@@ -460,17 +465,22 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 	 */
 	justkey = (key & ~(KEYC_META|KEYC_IMPLIED_META));
 	if (justkey <= 0x7f) {
+        log1("Return 7-bit key");
 		if (key & KEYC_META)
 			input_key_write(__func__, bev, "\033", 1);
+        log1("Return utf8 key");
 		ud.data[0] = justkey;
 		input_key_write(__func__, bev, &ud.data[0], 1);
 		return (0);
 	}
+
+
 	if (KEYC_IS_UNICODE(justkey)) {
 		if (key & KEYC_META)
 			input_key_write(__func__, bev, "\033", 1);
 		utf8_to_data(justkey, &ud);
 		input_key_write(__func__, bev, ud.data, ud.size);
+        log1("return unicode key");
 		return (0);
 	}
 
@@ -479,8 +489,10 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 	 * remove the flags from the key.
 	 */
 	if (~s->mode & MODE_KKEYPAD)
+        log1("key is not in application keypad mode");
 		key &= ~KEYC_KEYPAD;
 	if (~s->mode & MODE_KCURSOR)
+        log1("key is not in application cursor mode");
 		key &= ~KEYC_CURSOR;
 	if (s->mode & MODE_KEXTENDED)
 		ike = input_key_get(key|KEYC_EXTENDED);
@@ -495,21 +507,32 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 	if (ike == NULL && (key & KEYC_EXTENDED))
 		ike = input_key_get(key & ~KEYC_EXTENDED);
 	if (ike != NULL) {
-		log_debug("found key 0x%llx: \"%s\"", key, ike->data);
+        log1("key is in tree");
 		if ((key == KEYC_PASTE_START || key == KEYC_PASTE_END) &&
-		    (~s->mode & MODE_BRACKETPASTE))
+		    (~s->mode & MODE_BRACKETPASTE)) {
+            log1("return paste brackets");
 			return (0);
-		if ((key & KEYC_META) && (~key & KEYC_IMPLIED_META))
+        }
+		if ((key & KEYC_META) && (~key & KEYC_IMPLIED_META)){
+            log1("return meta key");
 			input_key_write(__func__, bev, "\033", 1);
+        }
+        log1("return raw key in tree");
 		input_key_write(__func__, bev, ike->data, strlen(ike->data));
+        log1("here");
 		return (0);
 	}
 
+
 	/* No builtin key sequence; construct an extended key sequence. */
 	if (~s->mode & MODE_KEXTENDED) {
-		if ((key & KEYC_MASK_MODIFIERS) != KEYC_CTRL)
+        log1("Trying to construct key sequence");
+		if ((key & KEYC_MASK_MODIFIERS) != KEYC_CTRL) {
+            log1("key is not in control mode");
 			goto missing;
+        }
 		justkey = (key & KEYC_MASK_KEY);
+        log1("just key: 0x%llx", key);
 		switch (justkey) {
 		case ' ':
 		case '2':
@@ -529,16 +552,28 @@ input_key(struct screen *s, struct bufferevent *bev, key_code key)
 			key = 127|(key & ~KEYC_MASK_KEY);
 			break;
 		default:
-			if (justkey >= 'A' && justkey <= '_')
+            log1("just key default case");
+			if (justkey >= 'A' && justkey <= '_') {
+                log1("Just key in range A to _");
 				key = (justkey - 'A')|(key & ~KEYC_MASK_KEY);
-			else if (justkey >= 'a' && justkey <= '~')
+            }
+			else if (justkey >= 'a' && justkey <= '~') {
+                
+                log1("Just key in range a to ~");
 				key = (justkey - 96)|(key & ~KEYC_MASK_KEY);
-			else
+            }
+			else {
+                log1("Just key not in range");
 				return (0);
+            }
 			break;
 		}
 		return (input_key(s, bev, key & ~KEYC_CTRL));
-	}
+	} else {
+        log1("EXTENDED MODE activated");
+    }
+
+
 	outkey = (key & KEYC_MASK_KEY);
 	modifiers = (key & KEYC_MASK_MODIFIERS);
 	if (outkey < 32 && outkey != 9 && outkey != 13 && outkey != 27) {
